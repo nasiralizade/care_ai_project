@@ -3,6 +3,8 @@
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
+      <excludeFolder url="file://$MODULE_DIR$/data" />
+      <excludeFolder url="file://$MODULE_DIR$/mimic-iv-3.1" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.14 (care_ai_project)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
