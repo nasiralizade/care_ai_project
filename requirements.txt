@@ -1,0 +1,7 @@
+duckdb>=0.10.0
+pandas>=2.0
+numpy>=1.26
+torch>=2.2
+scikit-learn>=1.4
+pyarrow>=15.0
+tqdm>=4.66
