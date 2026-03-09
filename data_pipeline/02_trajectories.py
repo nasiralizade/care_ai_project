@@ -17,6 +17,7 @@ DATA_DIR   = Path("data")
 TRAJ_DIR   = DATA_DIR / "trajectories"; TRAJ_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR  = DATA_DIR / "cache";        CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# ICU vitals — only available during ICU stay
 CHART_ITEMS = {
     220045: "heart_rate",
     220052: "arterial_bp_mean",
@@ -28,6 +29,7 @@ CHART_ITEMS = {
     223901: "gcs_motor",
 }
 
+# Labs — available across full hospital stay
 LAB_ITEMS = {
     50813: "lactate",
     50912: "creatinine",
@@ -47,7 +49,9 @@ LAB_ITEMS = {
 
 RESAMPLE_FREQ        = "1h"
 MAX_IMPUTE_GAP_HOURS = 4
-MIN_OBS_FRACTION     = 0.3
+MIN_OBS_FRACTION     = 0.10   # lowered from 0.30 — full hospital stay is sparser than ICU-only
+MIN_HOURS            = 24     # exclude same-day discharges; aligns with literature standard
+MAX_HOURS            = 336    # 14 days; removes extreme outliers that skew sequence models
 BATCH_SIZE           = 100
 
 
@@ -103,6 +107,7 @@ def prefilter_charts(con, cohort):
 
 
 def prefilter_transfers(con, cohort):
+    """Load unit location for all admissions."""
     cache_path = CACHE_DIR / "transfers_filtered.parquet"
     if cache_path.exists():
         log.info(f"Transfers cache found → {cache_path}")
@@ -123,6 +128,7 @@ def prefilter_transfers(con, cohort):
 
 
 def prefilter_services(con, cohort):
+    """Load clinical service assignments for all admissions."""
     cache_path = CACHE_DIR / "services_filtered.parquet"
     if cache_path.exists():
         log.info(f"Services cache found → {cache_path}")
@@ -141,6 +147,7 @@ def prefilter_services(con, cohort):
 
 
 def prefilter_microbiology(con, cohort):
+    """Load culture orders and results."""
     cache_path = CACHE_DIR / "microbiology_filtered.parquet"
     if cache_path.exists():
         log.info(f"Microbiology cache found → {cache_path}")
@@ -220,12 +227,13 @@ def load_microbiology_for_batch(con, hadm_ids, micro_parquet):
 
 
 def get_careunit_at_hour(transfers_df, hadm_id, time_index):
+    """For each hour, find which careunit the patient was in."""
     t = transfers_df[transfers_df.hadm_id == hadm_id].copy()
     if len(t) == 0:
         return pd.Series("unknown", index=time_index), pd.Series(0, index=time_index)
 
-    careunits  = []
-    is_icu_list = []
+    careunits    = []
+    is_icu_list  = []
     icu_keywords = ["intensive care", "icu", "ccu", "micu", "sicu", "cvicu", "nsicu"]
 
     for ts in time_index:
@@ -238,6 +246,7 @@ def get_careunit_at_hour(transfers_df, hadm_id, time_index):
 
 
 def get_service_at_hour(services_df, hadm_id, time_index):
+    """For each hour, find which clinical service the patient was under."""
     s = services_df[services_df.hadm_id == hadm_id].sort_values("transfertime")
     if len(s) == 0:
         return pd.Series("unknown", index=time_index)
@@ -259,7 +268,13 @@ def build_stay_timeseries(
         end=hosp_dischtime.ceil("h"),
         freq=RESAMPLE_FREQ
     )
-    if len(time_index) < 6:
+
+    n_hours = len(time_index)
+
+    # Apply min/max hour filters before doing any work
+    if n_hours < MIN_HOURS:
+        return None
+    if n_hours > MAX_HOURS:
         return None
 
     # ── ICU vitals (only during ICU stay) ─────────────────────────────────────
@@ -300,10 +315,10 @@ def build_stay_timeseries(
     ).values
 
     # ── Infection signal ───────────────────────────────────────────────────────
-    stay_micro = micro_df[micro_df.hadm_id == hadm_id]
+    stay_micro   = micro_df[micro_df.hadm_id == hadm_id]
     micro_hourly = pd.DataFrame(index=time_index)
     if len(stay_micro) > 0:
-        # Aggregate duplicate timestamps first — take max per charttime
+        # Aggregate duplicate timestamps — take max per charttime
         stay_micro_agg = (stay_micro
                           .groupby("charttime")[["culture_ordered", "positive_culture"]]
                           .max())
@@ -324,17 +339,17 @@ def build_stay_timeseries(
     ts = pd.concat([ts, micro_hourly], axis=1)
 
     # ── Observation mask (clinical vars only) ──────────────────────────────────
-    non_clinical = ["is_icu", "is_icu_service", "culture_ordered", "positive_culture"]
+    non_clinical  = ["is_icu", "is_icu_service", "culture_ordered", "positive_culture"]
     clinical_cols = [c for c in ts.columns if c not in non_clinical]
-    mask = ts[clinical_cols].notna().astype(int)
-    mask.columns = [f"{c}_obs" for c in mask.columns]
+    mask          = ts[clinical_cols].notna().astype(int)
+    mask.columns  = [f"{c}_obs" for c in mask.columns]
 
     if mask.values.mean() < MIN_OBS_FRACTION:
         return None
 
     # ── Imputation ─────────────────────────────────────────────────────────────
     ts[clinical_cols] = (ts[clinical_cols]
-                         .infer_objects(copy=False)
+                         .infer_objects()
                          .ffill(limit=MAX_IMPUTE_GAP_HOURS)
                          .fillna(ts[clinical_cols].median()))
 
@@ -344,7 +359,7 @@ def build_stay_timeseries(
     ts_z = ts_z.fillna(0.0)
 
     # Rename columns
-    ts_raw        = ts[clinical_cols].copy()
+    ts_raw         = ts[clinical_cols].copy()
     ts_raw.columns = [f"{c}_raw"  for c in clinical_cols]
     ts_z.columns   = [f"{c}_norm" for c in clinical_cols]
 
@@ -411,6 +426,8 @@ def process_batch(con, batch, charts_parquet, labs_parquet,
 def main():
     cohort = pd.read_parquet(DATA_DIR / "processed/cohort.parquet")
     log.info(f"Building trajectories for {len(cohort):,} stays...")
+    log.info(f"Filters: MIN_OBS={MIN_OBS_FRACTION:.0%}  |  "
+             f"MIN_HOURS={MIN_HOURS}  |  MAX_HOURS={MAX_HOURS} ({MAX_HOURS//24} days)")
 
     con = make_con()
     labs_parquet      = prefilter_labs(con, cohort)
