@@ -1,7 +1,10 @@
 import argparse
 import logging
 import sys
+import warnings
 from pathlib import Path
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,6 +24,7 @@ def step_data():
         "data_pipeline/01_cohort.py",
         "data_pipeline/02_trajectories.py",
         "data_pipeline/03_actions.py",
+        "data_pipeline/05_split.py",
     ]:
         log.info(f"Running {script}...")
         result = subprocess.run([sys.executable, script], capture_output=False)
@@ -30,4 +34,7 @@ def step_data():
     log.info("Data pipeline complete")
 
 
+
 step_data()
+
+
