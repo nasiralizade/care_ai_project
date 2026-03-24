@@ -1,0 +1,29 @@
+{
+  "n_test_stays": 2734,
+  "n_features_t1": 60,
+  "n_features_t24": 60,
+  "seed_hours": 24,
+  "rollout_horizon": 24,
+  "mean_test_mae_t1": 2.0653,
+  "mean_test_mae_t24": 2.6955,
+  "rollout_mae_step1": 1.8362,
+  "rollout_mae_step24": 1.9074,
+  "rollout_degradation_ratio": 1.039,
+  "pcmci": {
+    "total_links": 283,
+    "top_causes": {
+      "is_icu": 53,
+      "is_icu_service": 46,
+      "heart_rate": 41,
+      "spo2": 22,
+      "bun": 20
+    },
+    "top_effects": {
+      "is_icu_service": 18,
+      "is_icu": 15,
+      "hemoglobin": 14,
+      "spo2": 14,
+      "sodium": 14
+    }
+  }
+}

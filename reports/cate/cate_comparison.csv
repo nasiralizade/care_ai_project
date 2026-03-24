@@ -1,0 +1,8 @@
+action,tlearner_mean_cate,tlearner_std_cate,tlearner_pct_positive,drlearner_mean_cate,drlearner_std_cate,drlearner_pct_positive,causalforest_mean_cate,causalforest_std_cate,causalforest_pct_positive
+antibiotic,-0.0116,0.007,0.0216,-0.0057,0.1274,0.4927,-0.0045,0.0471,0.4715
+anticoagulant,0.0236,0.0292,0.8146,0.0165,0.1597,0.6825,0.0181,0.0631,0.6752
+diuretic,0.0219,0.0485,0.7147,0.0117,0.1346,0.6317,0.0159,0.0463,0.65
+fluid_bolus,-0.0045,0.0629,0.5713,0.0024,0.1031,0.5593,0.0032,0.0456,0.5684
+insulin,-0.0101,0.0094,0.1218,-0.0089,0.1006,0.4689,-0.0084,0.042,0.4349
+steroid,0.003,0.0321,0.5545,0.0064,0.1253,0.4653,0.0014,0.0516,0.4872
+vasopressor,-0.0384,0.0524,0.1847,-0.0327,0.3844,0.1811,-0.0382,0.0568,0.2114
